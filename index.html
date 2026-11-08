@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1725: Dynamic Synaptic Routing vs Dense Activation</title>
+    <style>
+        :root {
+            --bg-color: #0a0a0f;
+            --text-color: #e0e0e0;
+            --accent-cyan: #00f3ff;
+            --accent-green: #00ff9d;
+            --accent-red: #ff2a6d;
+            --accent-orange: #ff9d00;
+            --panel-bg: rgba(15, 15, 25, 0.9);
+        }
+        body {
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        header {
+            padding: 15px;
+            background: var(--panel-bg);
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+        h1 { margin: 0; font-size: 1.2rem; color: var(--accent-cyan); }
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        select, input, button {
+            background: #1a1a2e;
+            color: white;
+            border: 1px solid var(--accent-cyan);
+            padding: 8px;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+        button {
+            background: var(--accent-cyan);
+            color: black;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:hover { background: var(--accent-green); }
+        
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .stats-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--panel-bg);
+            border: 1px solid #333;
+            padding: 15px;
+            border-radius: 8px;
+            width: 250px;
+            font-size: 0.85rem;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .stat-value { font-weight: bold; }
+        .efficient { color: var(--accent-green); }
+        .inefficient { color: var(--accent-red); }
+        
+        .mode-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: var(--panel-bg);
+            border: 1px solid #333;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+        }
+        .phase-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--panel-bg);
+            border: 1px solid var(--accent-cyan);
+            padding: 10px 30px;
+            border-radius: 20px;
+            font-size: 1rem;
+            color: var(--accent-cyan);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>F1725 // DYNAMIC SYNAPTIC ROUTING</h1>
+    <div class="controls">
+        <select id="taskType">
+            <option value="secure_code">Generar Código Seguro (KSHIELD)</option>
+            <option value="creative">Redacción Creativa</option>
+            <option value="data_analysis">Análisis de Datos Masivos</option>
+        </select>
+        <select id="networkMode">
+            <option value="emergent">Modo: Sinapsis Emergentes (F1725)</option>
+            <option value="traditional">Modo: Red Densa Tradicional</option>
+        </select>
+        <button onclick="startGeneration()">EJECUTAR PROMPT</button>
+    </div>
+</header>
+
+<div id="canvas-container">
+    <canvas id="networkCanvas"></canvas>
+    
+    <div class="mode-indicator" id="modeText">MODO: SINAPSIS EMERGENTES</div>
+    
+    <div class="stats-panel">
+        <div class="stat-row"><span>Parámetros Activos:</span> <span class="stat-value" id="statParams">0%</span></div>
+        <div class="stat-row"><span>Consumo (FLOPs):</span> <span class="stat-value" id="statFlops">0</span></div>
+        <div class="stat-row"><span>Latencia Estimada:</span> <span class="stat-value" id="statLatency">0 ms</span></div>
+        <div class="stat-row"><span>Skills Sincronizados:</span> <span class="stat-value" id="statSkills">0/6</span></div>
+        <hr style="border-color: #333;">
+        <div class="stat-row"><span>Estado KSHIELD:</span> <span class="stat-value efficient" id="statKshield">VERIFICADO</span></div>
+    </div>
+
+    <div class="phase-indicator" id="phaseText">FASE: IDLE</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('networkCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    let width, height;
+    let nodes = [];
+    let connections = [];
+    let particles = [];
+    let animationId;
+    let currentPhase = 'IDLE';
+    
+    // Configuración de Skills del Sistema
+    const skills = [
+        { id: 'logic', name: 'Lógica', color: '#00f3ff' },
+        { id: 'creative', name: 'Creativo', color: '#ff9d00' },
+        { id: 'kshield', name: 'KSHIELD (Seguridad)', color: '#00ff9d' },
+        { id: 'data', name: 'Base de Datos', color: '#bd00ff' },
+        { id: 'vision', name: 'Visión', color: '#ff2a6d' },
+        { id: 'audio', name: 'Audio', color: '#00ff9d' }
+    ];
+
+    function resize() {
+        width = canvas.width = canvas.parentElement.offsetWidth;
+        height = canvas.height = canvas.parentElement.offsetHeight;
+        initNetwork();
+    }
+    window.addEventListener('resize', resize);
+
+    class Node {
+        constructor(x, y, type, label, skillId = null) {
+            this.x = x;
+            this.y = y;
+            this.type = type; // 'input', 'skill', 'reasoning', 'bottleneck', 'output'
+            this.label = label;
+            this.skillId = skillId;
+            this.radius = type === 'reasoning' || type === 'bottleneck' ? 25 : 18;
+            this.active = false;
+            this.pulse = 0;
+            this.color = '#333';
+        }
+
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + this.pulse, 0, Math.PI * 2);
+            ctx.fillStyle = this.active ? this.color : '#1a1a2e';
+            ctx.fill();
+            ctx.strokeStyle = this.active ? this.color : '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            if (this.active) {
+                this.pulse = Math.sin(Date.now() / 200) * 3;
+            } else {
+                this.pulse = 0;
+            }
+
+            ctx.fillStyle = '#fff';
+            ctx.font = '10px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText(this.label, this.x, this.y + 4);
+        }
+    }
+
+    class Connection {
+        constructor(source, target, weight = 1) {
+            this.source = source;
+            this.target = target;
+            this.weight = weight;
+            this.active = false;
+            this.color = '#333';
+        }
+
+        draw() {
+            ctx.beginPath();
+            ctx.moveTo(this.source.x, this.source.y);
+            ctx.lineTo(this.target.x, this.target.y);
+            ctx.strokeStyle = this.active ? this.color : 'rgba(50, 50, 50, 0.3)';
+            ctx.lineWidth = this.active ? this.weight * 2 : 1;
+            ctx.stroke();
+        }
+    }
+
+    class Particle {
+        constructor(connection) {
+            this.connection = connection;
+            this.progress = 0;
+            this.speed = 0.02 + Math.random() * 0.02;
+            this.color = connection.source.color;
+        }
+
+        update() {
+            this.progress += this.speed;
+            return this.progress >= 1;
+        }
+
+        draw() {
+            const x = this.connection.source.x + (this.connection.target.x - this.connection.source.x) * this.progress;
+            const y = this.connection.source.y + (this.connection.target.y - this.connection.source.y) * this.progress;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+        }
+    }
+
+    function initNetwork() {
+        nodes = [];
+        connections = [];
+        particles = [];
+
+        const mode = document.getElementById('networkMode').value;
+        const isEmergent = mode === 'emergent';
+
+        // 1. Input Node
+        const inputNode = new Node(width * 0.1, height * 0.5, 'input', 'PROMPT');
+        inputNode.color = '#fff';
+        nodes.push(inputNode);
+
+        // 2. Skill Nodes
+        const skillSpacing = height / (skills.length + 1);
+        skills.forEach((skill, i) => {
+            const node = new Node(width * 0.35, skillSpacing * (i + 1), 'skill', skill.name, skill.id);
+            node.color = skill.color;
+            nodes.push(node);
+            
+            // Conexión Input -> Skill
+            connections.push(new Connection(inputNode, node, 1));
+        });
+
+        // 3. Reasoning / Bottleneck Nodes
+        if (isEmergent) {
+            // Distribuido y eficiente
+            const r1 = new Node(width * 0.65, height * 0.35, 'reasoning', 'RAZONAMIENTO A');
+            r1.color = '#00ff9d';
+            const r2 = new Node(width * 0.65, height * 0.65, 'reasoning', 'RAZONAMIENTO B');
+            r2.color = '#00ff9d';
+            nodes.push(r1, r2);
+
+            skills.forEach((skill, i) => {
+                const skillNode = nodes[i + 1];
+                // Conectar solo de forma lógica (simulada)
+                if (i < 4) connections.push(new Connection(skillNode, r1, 1));
+                else connections.push(new Connection(skillNode, r2, 1));
+            });
+
+            // 4. Output Node
+            const output = new Node(width * 0.9, height * 0.5, 'output', 'SALIDA');
+            output.color = '#fff';
+            nodes.push(output);
+            connections.push(new Connection(r1, output, 1));
+            connections.push(new Connection(r2, output, 1));
+
+        } else {
+            // Tradicional: Cuello de botella central
+            const bottleneck = new Node(width * 0.65, height * 0.5, 'bottleneck', 'CUELLO DE\nBOTELLA');
+            bottleneck.color = '#ff2a6d';
+            nodes.push(bottleneck);
+
+            skills.forEach((skill, i) => {
+                const skillNode = nodes[i + 1];
+                connections.push(new Connection(skillNode, bottleneck, 0.5)); // Todas convergen aquí
+            });
+
+            const output = new Node(width * 0.9, height * 0.5, 'output', 'SALIDA');
+            output.color = '#fff';
+            nodes.push(output);
+            connections.push(new Connection(bottleneck, output, 0.5));
+        }
+    }
+
+    function setPhase(text) {
+        currentPhase = text;
+        const el = document.getElementById('phaseText');
+        el.innerText = `FASE: ${text}`;
+        el.style.opacity = 1;
+        setTimeout(() => { el.style.opacity = 0; }, 2000);
+    }
+
+    function updateStats(mode, task) {
+        const paramsEl = document.getElementById('statParams');
+        const flopsEl = document.getElementById('statFlops');
+        const latencyEl = document.getElementById('statLatency');
+        const skillsEl = document.getElementById('statSkills');
+        const kshieldEl = document.getElementById('statKshield');
+
+        if (mode === 'emergent') {
+            let activeSkillsCount = 0;
+            if (task === 'secure_code') activeSkillsCount = 3; // logic, kshield, data
+            if (task === 'creative') activeSkillsCount = 2; // creative, logic
+            if (task === 'data_analysis') activeSkillsCount = 2; // data, logic
+
+            paramsEl.innerText = `${(activeSkillsCount / 6 * 100).toFixed(0)}%`;
+            paramsEl.className = 'stat-value efficient';
+            flopsEl.innerText = `${(activeSkillsCount / 6 * 100).toFixed(0)}T`;
+            flopsEl.className = 'stat-value efficient';
+            latencyEl.innerText = '120 ms';
+            latencyEl.className = 'stat-value efficient';
+            skillsEl.innerText = `${activeSkillsCount}/6`;
+            kshieldEl.innerText = task === 'secure_code' ? 'VALIDANDO...' : 'N/A';
+            kshieldEl.className = task === 'secure_code' ? 'stat-value efficient' : 'stat-value';
+        } else {
+            paramsEl.innerText = '100%';
+            paramsEl.className = 'stat-value inefficient';
+            flopsEl.innerText = '850T';
+            flopsEl.className = 'stat-value inefficient';
+            latencyEl.innerText = '850 ms';
+            latencyEl.className = 'stat-value inefficient';
+            skillsEl.innerText = '6/6 (Ruido)';
+            kshieldEl.innerText = 'COLAPSADO';
+            kshieldEl.className = 'stat-value inefficient';
+        }
+    }
+
+    function startGeneration() {
+        const mode = document.getElementById('networkMode').value;
+        const task = document.getElementById('taskType').value;
+        const isEmergent = mode === 'emergent';
+
+        // Reset
+        nodes.forEach(n => n.active = false);
+        connections.forEach(c => { c.active = false; c.color = '#333'; });
+        particles = [];
+
+        document.getElementById('modeText').innerText = `MODO: ${isEmergent ? 'SINAPSIS EMERGENTES (F1725)' : 'RED DENSA TRADICIONAL'}`;
+        document.getElementById('modeText').style.color = isEmergent ? 'var(--accent-green)' : 'var(--accent-red)';
+
+        updateStats(mode, task);
+
+        // Secuencia de animación
+        setTimeout(() => {
+            nodes[0].active = true; // Input
+            setPhase('1. LECTURA DE PROMPT');
+            
+            setTimeout(() => {
+                setPhase(isEmergent ? '2. ACTIVACIÓN DE SKILLS ESPECÍFICOS' : '2. ACTIVACIÓN MASIVA (RUIDO)');
+                
+                // Lógica de activación
+                let skillsToActivate = [];
+                if (isEmergent) {
+                    if (task === 'secure_code') skillsToActivate = ['logic', 'kshield', 'data'];
+                    if (task === 'creative') skillsToActivate = ['creative', 'logic'];
+                    if (task === 'data_analysis') skillsToActivate = ['data', 'logic'];
+                } else {
+                    skillsToActivate = skills.map(s => s.id); // Todos
+                }
+
+                nodes.forEach(node => {
+                    if (node.type === 'skill' && skillsToActivate.includes(node.skillId)) {
+                        node.active = true;
+                        // Activar conexiones relevantes
+                        connections.forEach(conn => {
+                            if (conn.source === nodes[0] && conn.target === node) {
+                                conn.active = true;
+                                conn.color = node.color;
+                                // Spawn particles
+                                for(let i=0; i<5; i++) particles.push(new Particle(conn));
+                            }
+                        });
+                    } else if (node.type === 'skill' && !isEmergent) {
+                        node.active = true; // Tradicional: todo se enciende
+                        node.color = '#ff2a6d';
+                        connections.forEach(conn => {
+                            if (conn.source === nodes[0] && conn.target === node) {
+                                conn.active = true;
+                                conn.color = '#ff2a6d';
+                                for(let i=0; i<5; i++) particles.push(new Particle(conn));
+                            }
+                            if (conn.target.type === 'bottleneck' && conn.source === node) {
+                                conn.active = true;
+                                conn.color = '#ff2a6d';
+                            }
+                        });
+                    }
+                });
+
+                setTimeout(() => {
+                    setPhase(isEmergent ? '3. RAZONAMIENTO DISTRIBUIDO + KSHIELD' : '3. CUELLO DE BOTELLA (SOBRECARGA)');
+                    
+                    nodes.forEach(node => {
+                        if (node.type === 'reasoning' || node.type === 'bottleneck') {
+                            node.active = true;
+                            connections.forEach(conn => {
+                                if (conn.target === node && conn.source.active) {
+                                    conn.active = true;
+                                    conn.color = isEmergent ? '#00ff9d' : '#ff2a6d';
+                                    for(let i=0; i<3; i++) particles.push(new Particle(conn));
+                                }
+                            });
+                        }
+                    });
+
+                    setTimeout(() => {
+                        setPhase('4. GENERACIÓN DE SALIDA');
+                        nodes.forEach(node => {
+                            if (node.type === 'output') {
+                                node.active = true;
+                                connections.forEach(conn => {
+                                    if (conn.target === node && conn.source.active) {
+                                        conn.active = true;
+                                        conn.color = '#fff';
+                                        for(let i=0; i<10; i++) particles.push(new Particle(conn));
+                                    }
+                                });
+                            }
+                        });
+                    }, 1500);
+
+                }, 1500);
+
+            }, 1000);
+        }, 500);
+    }
+
+    function animate() {
+        ctx.fillStyle = 'rgba(10, 10, 15, 0.2)'; // Trail effect
+        ctx.fillRect(0, 0, width, height);
+
+        connections.forEach(c => c.draw());
+        nodes.forEach(n => n.draw());
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.draw();
+            if (p.update()) {
+                particles.splice(i, 1);
+                // Trigger next node activation visually if needed, but simple pulse is enough
+            }
+                }
+
+        animationId = requestAnimationFrame(animate);
+    }
+
+    // Init
+    resize();
+    animate();
+    document.getElementById('networkMode').addEventListener('change', () => {
+        initNetwork();
+        document.getElementById('modeText').innerText = document.getElementById('networkMode').value === 'emergent' ? 'MODO: SINAPSIS EMERGENTES (F1725)' : 'MODO: RED DENSA TRADICIONAL';
+        document.getElementById('modeText').style.color = document.getElementById('networkMode').value === 'emergent' ? 'var(--accent-green)' : 'var(--accent-red)';
+    });
+
+</script>
+</body>
+  </html>
